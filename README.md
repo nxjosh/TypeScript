@@ -46,12 +46,12 @@ function parseNumber(input: string) /* throws TypeError, RangeError */ {
     return num;
 }
 
-// and when you call it, TypeScript will check if the function throws the correct error types
-function test() { // ❌ Error: Function does not declare throws
+// and when you call it, TypeScript automatically infers the throws from the called function
+function test() /* throws TypeError, RangeError */ { // ✅ Valid - automatically inferred from parseNumber
     parseNumber('123');
 }
 
-function test2() throws { // ✅ Valid - no error, pass through any exceptions
+function test2() throws { // ✅ Valid - explicit empty throws clause allows any exceptions
     parseNumber('123');
 }
 ```
