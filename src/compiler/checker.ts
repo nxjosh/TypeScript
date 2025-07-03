@@ -37821,18 +37821,23 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
             return;
         }
 
-        // Get the signature of the containing function to check its throws type
+        // Check if the containing function has an EXPLICIT throws clause
+        const containingThrowsClause = getThrowsClause(containingFunction);
+        if (!containingThrowsClause) {
+            // No explicit throws clause, must report error
+            error(node, Diagnostics.Function_throws_0_but_it_is_not_declared_in_the_throws_clause, typeToString(thrownType));
+            return;
+        }
+
+        // Check if the containing function's throws clause covers the thrown type
         const containingSignature = getSignatureFromDeclaration(containingFunction);
         if (!containingSignature) {
             return;
         }
-
-        // Get the throws type of the containing function (explicit or inferred)
-        const containingThrowsType = getThrowsTypeOfSignature(containingSignature);
         
-        // If the containing function doesn't have any throws (explicit or inferred), report error
+        const containingThrowsType = getThrowsTypeFromAnnotation(containingSignature);
         if (containingThrowsType === neverType) {
-            error(node, Diagnostics.Function_throws_0_but_it_is_not_declared_in_the_throws_clause, typeToString(thrownType));
+            // Empty throws clause - allows all throws to pass through
             return;
         }
 
