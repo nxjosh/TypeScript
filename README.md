@@ -1,5 +1,150 @@
-
 # TypeScript
+
+## 🔥 TypeScript with Throws Clause Support
+
+This is a fork of Microsoft's TypeScript that adds support for **throws clauses** in function signatures, enabling explicit exception type declarations and compile-time validation of error handling.
+
+### ✨ Features
+
+- **Explicit exception declarations** in function signatures
+- **Compile-time validation** that thrown exceptions match the declared throws clause
+- **Support for complex types** including unions, conditionals, and generics
+- **Type inference** for exception types in function bodies
+- **IntelliSense integration** for better developer experience
+
+### 📝 Syntax Examples
+
+#### Basic Exception Declaration
+```typescript
+// Declare that a function can throw specific error types
+function parseNumber(input: string): number throws TypeError, RangeError {
+    if (typeof input !== 'string') {
+        throw new TypeError('Input must be a string'); // ✅ Valid - TypeError is declared
+    }
+    
+    const num = parseInt(input);
+    if (isNaN(num)) {
+        throw new RangeError('Invalid number format'); // ✅ Valid - RangeError is declared  
+    }
+    
+    return num;
+}
+```
+
+#### Empty Throws Clause (Function Can Rethrow)
+```typescript
+// Empty throws clause allows rethrowing any caught exceptions
+function safeOperation<T>(fn: () => T): T throws {
+    try {
+        return fn();
+    } catch (error) {
+        // Log error and rethrow
+        console.error('Operation failed:', error);
+        throw error; // ✅ Valid - empty throws clause allows rethrowing
+    }
+}
+```
+
+#### Union Types in Throws Clauses
+```typescript
+// Multiple exception types using union syntax
+function processData(data: unknown): string throws TypeError | ValidationError {
+    if (typeof data !== 'object') {
+        throw new TypeError('Data must be an object'); // ✅ Valid
+    }
+    
+    if (!isValid(data)) {
+        throw new ValidationError('Invalid data format'); // ✅ Valid
+    }
+    
+    return JSON.stringify(data);
+}
+```
+
+#### Generic Throws Clauses with Conditional Types
+```typescript
+// Conditional exception types based on generic parameters
+function convert<T extends string | number>(
+    value: T
+): string throws T extends string ? TypeError : RangeError {
+    
+    if (typeof value === 'string') {
+        if (value.length === 0) {
+            throw new TypeError('Empty string not allowed'); // ✅ Valid when T extends string
+        }
+        return value;
+    } else {
+        if (value < 0) {
+            throw new RangeError('Negative numbers not allowed'); // ✅ Valid when T extends number  
+        }
+        return value.toString();
+    }
+}
+```
+
+#### Interface Method Signatures
+```typescript
+interface DataProcessor {
+    // Method signatures can include throws clauses
+    process(data: string): ProcessedData throws ValidationError;
+    
+    // Optional throws clause with multiple types
+    validate?(input: unknown): boolean throws TypeError, ValidationError;
+}
+
+class MyProcessor implements DataProcessor {
+    process(data: string): ProcessedData throws ValidationError {
+        if (!data.trim()) {
+            throw new ValidationError('Data cannot be empty'); // ✅ Valid
+        }
+        return { processed: data.trim() };
+    }
+}
+```
+
+#### Type Inference and Validation
+```typescript
+function riskyOperation(): string throws Error {
+    if (Math.random() > 0.5) {
+        throw new TypeError('Random failure'); // ❌ Error: TypeError not declared in throws clause
+    }
+    
+    throw new Error('Expected failure'); // ✅ Valid - Error is declared
+}
+
+// Function without throws clause cannot throw
+function safeFunction(): string {
+    throw new Error('Oops'); // ❌ Error: Function does not declare any exceptions in throws clause
+}
+```
+
+#### Arrow Functions with Throws Clauses
+```typescript
+// Arrow functions support throws clauses too
+const asyncParser = async (input: string): Promise<number> throws TypeError => {
+    if (!input) {
+        throw new TypeError('Input is required'); // ✅ Valid
+    }
+    return parseInt(input);
+};
+
+// Generic arrow function with conditional throws
+const conditionalThrower = <T>(value: T): string throws T extends Error ? never : TypeError => {
+    if (value instanceof Error) {
+        return value.message; // No exception thrown when T extends Error
+    }
+    
+    if (typeof value !== 'string') {
+        throw new TypeError('Value must be string or Error'); // ✅ Valid when T doesn't extend Error
+    }
+    
+    return value;
+};
+```
+
+### 🔗 Original TypeScript
+
+This fork is based on Microsoft's TypeScript. For the original project, documentation, and community resources, see below:
 
 [![CI](https://github.com/microsoft/TypeScript/actions/workflows/ci.yml/badge.svg)](https://github.com/microsoft/TypeScript/actions/workflows/ci.yml)
 [![npm version](https://badge.fury.io/js/typescript.svg)](https://www.npmjs.com/package/typescript)
