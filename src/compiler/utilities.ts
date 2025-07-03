@@ -4762,6 +4762,11 @@ export function getTypeParameterFromJsDoc(node: TypeParameterDeclaration & { par
     return typeParameters && find(typeParameters, p => p.name.escapedText === name);
 }
 
+/** @internal */
+export function isInThrowsClause(node: Node): boolean {
+    return !!findAncestor(node, n => n.kind === SyntaxKind.ThrowsClause);
+}
+
 /** @internal @knipignore */
 export function hasTypeArguments(node: Node): node is HasTypeArguments {
     return !!(node as HasTypeArguments).typeArguments;
@@ -11487,13 +11492,14 @@ export function createNameResolver({
                         // at a higher level than type parameters would normally be
                         if (meaning & result.flags & SymbolFlags.Type && lastLocation.kind !== SyntaxKind.JSDoc) {
                             useResult = result.flags & SymbolFlags.TypeParameter
-                                // type parameters are visible in parameter list, return type and type parameter list
+                                // type parameters are visible in parameter list, return type, throws clause, and type parameter list
                                 ? !!(lastLocation.flags & NodeFlags.Synthesized) || // Synthetic fake scopes are added for signatures so type parameters are accessible from them
                                     lastLocation === (location as FunctionLikeDeclaration).type ||
                                     lastLocation.kind === SyntaxKind.Parameter ||
                                     lastLocation.kind === SyntaxKind.JSDocParameterTag ||
                                     lastLocation.kind === SyntaxKind.JSDocReturnTag ||
-                                    lastLocation.kind === SyntaxKind.TypeParameter
+                                    lastLocation.kind === SyntaxKind.TypeParameter ||
+                                    isInThrowsClause(lastLocation)
                                 // local types not visible outside the function body
                                 : false;
                         }

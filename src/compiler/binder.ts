@@ -130,6 +130,7 @@ import {
     InternalSymbolName,
     isAliasableExpression,
     isAmbientModule,
+    isArrowFunction,
     isAssignmentExpression,
     isAssignmentOperator,
     isAssignmentTarget,
@@ -2963,6 +2964,9 @@ function createBinder(): (file: SourceFile, options: CompilerOptions) => void {
                 break; // Binding the children will handle everything
             case SyntaxKind.TypeParameter:
                 return bindTypeParameter(node as TypeParameterDeclaration);
+            case SyntaxKind.ThrowsClause:
+                // Bind each type in the throws clause so they can be resolved by the type checker
+                return bindEachChild(node);
             case SyntaxKind.Parameter:
                 return bindParameter(node as ParameterDeclaration);
             case SyntaxKind.VariableDeclaration:
@@ -3722,7 +3726,7 @@ function createBinder(): (file: SourceFile, options: CompilerOptions) => void {
                 emitFlags |= NodeFlags.HasAsyncFunctions;
             }
         }
-
+        // Note: throws clause types are automatically bound via AST traversal in bindEachChild
         checkStrictModeFunctionName(node);
         if (inStrictMode) {
             checkStrictModeFunctionDeclaration(node);
@@ -3739,6 +3743,7 @@ function createBinder(): (file: SourceFile, options: CompilerOptions) => void {
                 emitFlags |= NodeFlags.HasAsyncFunctions;
             }
         }
+        // Note: throws clause types are automatically bound via AST traversal in bindEachChild
         if (currentFlow) {
             node.flowNode = currentFlow;
         }

@@ -1136,6 +1136,8 @@ import {
     WithStatement,
     WriterContextOut,
     YieldExpression,
+    isThrowStatement,
+    ConciseBody
 } from "./_namespaces/ts.js";
 import * as moduleSpecifiers from "./_namespaces/ts.moduleSpecifiers.js";
 import * as performance from "./_namespaces/ts.performance.js";
@@ -1317,6 +1319,7 @@ const enum TypeSystemPropertyName {
     ResolvedBaseConstructorType,
     DeclaredType,
     ResolvedReturnType,
+    ResolvedThrowsType,
     ImmediateBaseConstraint,
     ResolvedTypeArguments,
     ResolvedBaseTypes,
@@ -11404,10 +11407,12 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                 return !!(target as TypeReference).resolvedTypeArguments;
             case TypeSystemPropertyName.ResolvedBaseTypes:
                 return !!(target as InterfaceType).baseTypesResolved;
-            case TypeSystemPropertyName.WriteType:
-                return !!getSymbolLinks(target as Symbol).writeType;
-            case TypeSystemPropertyName.ParameterInitializerContainsUndefined:
-                return getNodeLinks(target as ParameterDeclaration).parameterInitializerContainsUndefined !== undefined;
+                    case TypeSystemPropertyName.WriteType:
+            return !!getSymbolLinks(target as Symbol).writeType;
+        case TypeSystemPropertyName.ParameterInitializerContainsUndefined:
+            return getNodeLinks(target as ParameterDeclaration).parameterInitializerContainsUndefined !== undefined;
+                case TypeSystemPropertyName.ResolvedThrowsType:
+            return !!(target as Signature).resolvedThrowsType;
         }
         return Debug.assertNever(propertyName);
     }
@@ -16394,6 +16399,51 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
             }
         }
         return getReturnTypeOfTypeTag(declaration);
+    }
+
+    function getThrowsTypeOfSignature(signature: Signature): Type {
+        if (!signature.resolvedThrowsType) {
+            if (!pushTypeResolution(signature, TypeSystemPropertyName.ResolvedThrowsType)) {
+                return neverType;
+            }
+            let type = signature.target ? instantiateType(getThrowsTypeOfSignature(signature.target), signature.mapper) :
+                signature.compositeSignatures ? instantiateType(getUnionOrIntersectionType(map(signature.compositeSignatures, getThrowsTypeOfSignature), signature.compositeKind, UnionReduction.Subtype), signature.mapper) :
+                signature.declaration ? (() => {
+                    const annotationType = getThrowsTypeFromAnnotation(signature);
+                    return annotationType !== neverType ? annotationType : getThrowsTypeFromBody(signature.declaration as FunctionLikeDeclaration);
+                })() : neverType;
+                
+            if (!popTypeResolution()) {
+                type = neverType;
+            }
+            signature.resolvedThrowsType ??= type;
+        }
+        return signature.resolvedThrowsType;
+    }
+
+    function getThrowsTypeFromAnnotation(signature: Signature): Type {
+        const declaration = signature.declaration;
+        if (!declaration || !isFunctionLike(declaration)) {
+            return neverType;
+        }
+        const throwsClause = (declaration as FunctionLikeDeclaration).throwsClause;
+        if (!throwsClause || throwsClause.types.length === 0) {
+            return neverType;
+        }
+        const types = throwsClause.types.map(typeNode => {
+            const resolvedType = getTypeFromTypeNode(typeNode);
+            // Apply the signature's type mapper if available to handle type parameters
+            return signature.mapper ? instantiateType(resolvedType, signature.mapper) : resolvedType;
+        });
+        return getUnionType(types, UnionReduction.Subtype);
+    }
+
+    function getThrowsTypeFromBody(declaration: FunctionLikeDeclaration): Type {
+        if (!declaration.body) {
+            return neverType;
+        }
+        const thrownTypes = collectThrownTypes(declaration.body);
+        return thrownTypes.length > 0 ? getUnionType(thrownTypes, UnionReduction.Subtype) : neverType;
     }
 
     function isResolvingReturnTypeOfSignature(signature: Signature): boolean {
@@ -26104,6 +26154,13 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
         }
     }
 
+    function applyToThrowsTypes(source: Signature, target: Signature, callback: (s: Type, t: Type) => void) {
+        const targetThrowsType = getThrowsTypeOfSignature(target);
+        if (couldContainTypeVariables(targetThrowsType)) {
+            callback(getThrowsTypeOfSignature(source), targetThrowsType);
+        }
+    }
+
     function createInferenceContext(typeParameters: readonly TypeParameter[], signature: Signature | undefined, flags: InferenceFlags, compareTypes?: TypeComparer): InferenceContext {
         return createInferenceContextWorker(typeParameters.map(createInferenceInfo), signature, flags, compareTypes || compareTypesAssignable);
     }
@@ -27360,6 +27417,7 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                 bivariant = saveBivariant;
             }
             applyToReturnTypes(source, target, inferFromTypes);
+            applyToThrowsTypes(source, target, inferFromTypes);
         }
 
         function inferFromIndexTypes(source: Type, target: Type) {
@@ -37703,6 +37761,9 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
             }
         }
 
+        // Check throws clause validation
+        checkThrowsClauseForCall(node, signature);
+
         return returnType;
     }
 
@@ -37712,6 +37773,72 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
             const suggestionNode = getDeprecatedSuggestionNode(node);
             const name = tryGetPropertyAccessOrIdentifierToString(getInvokedExpression(node));
             addDeprecatedSuggestionWithSignature(suggestionNode, signature.declaration, name, signatureToString(signature));
+        }
+    }
+
+    function isInTryCatchBlock(node: Node): boolean {
+        let current = node.parent;
+        while (current) {
+            if (current.kind === SyntaxKind.TryStatement) {
+                const tryStatement = current as TryStatement;
+                // Check if the node is in the try block
+                            if (tryStatement.tryBlock && isNodeDescendantOf(node, tryStatement.tryBlock)) {
+                return !!tryStatement.catchClause;
+            }
+            }
+            current = current.parent;
+        }
+        return false;
+    }
+
+    function getThrowsClause(functionNode: SignatureDeclaration) {
+        if (isFunctionDeclaration(functionNode) || isFunctionExpression(functionNode) || isArrowFunction(functionNode) || 
+            isMethodDeclaration(functionNode) || isConstructorDeclaration(functionNode) || isGetAccessorDeclaration(functionNode) || 
+            isSetAccessorDeclaration(functionNode)) {
+            return (functionNode as any).throwsClause;
+        }
+        return undefined;
+    }
+
+    function checkThrowsClauseForCall(node: CallLikeExpression, signature: Signature) {
+        // Get the throws type of the called function
+        const thrownType = getThrowsTypeOfSignature(signature);
+        
+        // If the function doesn't throw anything, no validation needed
+        if (thrownType === neverType) {
+            return;
+        }
+
+        // Check if we're in a try-catch block
+        if (isInTryCatchBlock(node)) {
+            return;
+        }
+
+        // Get the current function context
+        const containingFunction = getContainingFunction(node);
+        if (!containingFunction) {
+            // Top-level code, no throws clause validation needed
+            return;
+        }
+
+        // Check if the containing function has a throws clause
+        const containingThrowsClause = getThrowsClause(containingFunction);
+        if (!containingThrowsClause) {
+            // No throws clause, must report error
+            error(node, Diagnostics.Function_throws_0_but_it_is_not_declared_in_the_throws_clause, typeToString(thrownType));
+            return;
+        }
+
+        // Check if the containing function's throws clause covers the thrown type
+        const containingThrowsType = getThrowsTypeFromAnnotation(containingThrowsClause);
+        if (containingThrowsType === neverType) {
+            // Empty throws clause - allows all throws to pass through
+            return;
+        }
+
+        // Check if the thrown type is assignable to the containing function's throws type
+        if (!isTypeAssignableTo(thrownType, containingThrowsType)) {
+            error(node, Diagnostics.Function_throws_0_but_it_is_not_declared_in_the_throws_clause, typeToString(thrownType));
         }
     }
 
@@ -39502,7 +39629,28 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
         }
     }
 
-    function checkFunctionExpressionOrObjectLiteralMethodDeferred(node: ArrowFunction | FunctionExpression | MethodDeclaration) {
+            function checkFunctionExpressionOrObjectLiteralMethodDeferred(node: ArrowFunction | FunctionExpression | MethodDeclaration) {
+            // Add function body validation for throws clauses
+            if (node.kind !== SyntaxKind.ArrowFunction && node.body && node.throwsClause && node.throwsClause.types.length > 0) {
+                validateFunctionBodyAgainstThrowsClause(node as FunctionExpression | MethodDeclaration);
+            }
+        // Check function body against throws clause
+        if (node.body && node.throwsClause) {
+            const declaredThrows = node.throwsClause.types;
+            const actuallyThrown = collectThrownTypes(node.body);
+            
+            // If throws clause is empty, allow all throws (inference mode)
+            if (declaredThrows.length === 0) {
+                return;
+            }
+            
+            // Check if each actually thrown type is compatible with declared throws
+            for (const thrown of actuallyThrown) {
+                if (!isThrowsTypeCompatible(thrown, declaredThrows)) {
+                    error(node, Diagnostics.Function_throws_0_but_it_is_not_declared_in_the_throws_clause, typeToString(thrown));
+                }
+            }
+        }
         Debug.assert(node.kind !== SyntaxKind.MethodDeclaration || isObjectLiteralMethod(node));
 
         const functionFlags = getFunctionFlags(node);
@@ -39534,8 +39682,211 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                     checkReturnExpression(node, returnOrPromisedType, node.body, node.body, exprType);
                 }
             }
+            const declaredThrows = node.throwsClause?.types ?? [];
+            const actuallyThrown = collectThrownTypes(node.body);
+            
+         
+
+            for (const thrown of actuallyThrown) {
+                if (!isThrowsTypeCompatible(thrown, declaredThrows)) {
+                    error(node, {
+                        message: `Function throws ${typeToString(thrown)}, but it is not declared in the throws clause.`,
+                        category: DiagnosticCategory.Error,
+                        code: 1234,
+                        key: 'functionThrowsButNotDeclaredInThrowsClause',
+                    });
+                }
+            }
         }
     }
+            
+                    /**
+                     * Reusable function to check if an error/exception type is compatible with declared types.
+                     * This function handles complex type constructs including:
+                     * - Exact type matches
+                     * - Inheritance hierarchies (thrown type extends declared type)
+                     * - Union types (checks each constituent)
+                     * - Type aliases (resolves to underlying types)
+                     * - Intersection types
+                     * - Generic types with constraints
+                     * - Conditional types
+                     * 
+                     * The function ensures we work with symbols and proper type relationships,
+                     * not just structural compatibility.
+                     */
+                    function isThrowsTypeCompatible(thrownType: Type, declaredTypeNodes: readonly TypeNode[]): boolean {
+                        // Helper function to recursively resolve a type to its concrete constituents
+                        function resolveToConcreteTypes(type: Type): Type[] {
+                            // Handle union types - need to check each constituent  
+                            if (type.flags & TypeFlags.Union) {
+                                const unionType = type as UnionType;
+                                return unionType.types.flatMap(t => resolveToConcreteTypes(t));
+                            }
+                            
+                            // Handle intersection types
+                            if (type.flags & TypeFlags.Intersection) {
+                                const intersectionType = type as IntersectionType;
+                                return intersectionType.types.flatMap(t => resolveToConcreteTypes(t));
+                            }
+                            
+                            // Handle type aliases - resolve to the aliased type
+                            if (type.aliasSymbol) {
+                                // For type references, try to get the resolved type
+                                if (type.flags & TypeFlags.Object && (type as ObjectType).objectFlags & ObjectFlags.Reference) {
+                                    const resolvedType = getTypeFromTypeReference(type as any);
+                                    if (resolvedType !== type) {
+                                        return resolveToConcreteTypes(resolvedType);
+                                    }
+                                }
+                            }
+                            
+                            // Handle type parameters with constraints
+                            if (type.flags & TypeFlags.TypeParameter) {
+                                const constraint = getConstraintOfTypeParameter(type as TypeParameter);
+                                if (constraint) {
+                                    return resolveToConcreteTypes(constraint);
+                                }
+                            }
+                            
+                            // Handle conditional types - resolve based on the condition
+                            if (type.flags & TypeFlags.Conditional) {
+                                // For throws purposes, we'll check both the true and false branches
+                                const conditionalType = type as ConditionalType;
+                                const trueType = getTypeFromTypeNode(conditionalType.root.node.trueType);
+                                const falseType = getTypeFromTypeNode(conditionalType.root.node.falseType);
+                                return [...resolveToConcreteTypes(trueType), ...resolveToConcreteTypes(falseType)];
+                            }
+                            
+                            // Handle indexed access types
+                            if (type.flags & TypeFlags.IndexedAccess) {
+                                // For indexed access types, we resolve them to their actual type
+                                return resolveToConcreteTypes(type);
+                            }
+                            
+                            // Return the concrete type
+                            return [type];
+                        }
+                        
+                        // Helper function to check if a type is assignable to any of the declared types
+                        function isAssignableToAnyDeclaredType(thrownType: Type, declaredTypeNodes: readonly TypeNode[]): boolean {
+                            return declaredTypeNodes.some(declaredTypeNode => {
+                                const declaredType = getTypeFromTypeNode(declaredTypeNode);
+                                return isErrorTypeAssignableTo(thrownType, declaredType);
+                            });
+                        }
+                        
+                        // Core assignability function that handles inheritance and symbol matching
+                        function isErrorTypeAssignableTo(thrown: Type, declared: Type): boolean {
+                            // Exact type match
+                            if (thrown === declared) {
+                                return true;
+                            }
+                            
+                            // Symbol-based exact match (handles generic type instantiations)
+                            if (thrown.symbol && declared.symbol && thrown.symbol === declared.symbol) {
+                                return true;
+                            }
+                            
+                            // Use TypeScript's built-in assignability check as the primary mechanism
+                            if (isTypeAssignableTo(thrown, declared)) {
+                                return true;
+                            }
+                            
+                            // Additional inheritance checks for complex hierarchies
+                            if (thrown.symbol && declared.symbol) {
+                                // Check inheritance for object types (classes/interfaces)
+                                if (thrown.flags & TypeFlags.Object && declared.flags & TypeFlags.Object) {
+                                    const thrownObjectType = thrown as ObjectType;
+                                    
+                                    // Handle interface inheritance
+                                    if (thrownObjectType.objectFlags & ObjectFlags.Interface) {
+                                        const baseTypes = getBaseTypes(thrownObjectType as InterfaceType);
+                                        return baseTypes.some(baseType => isErrorTypeAssignableTo(baseType, declared));
+                                    }
+                                    
+                                    // Handle class inheritance
+                                    if (thrownObjectType.objectFlags & ObjectFlags.Class) {
+                                        const classType = thrownObjectType as InterfaceType;
+                                        const baseTypes = getBaseTypes(classType);
+                                        return baseTypes.some(baseType => isErrorTypeAssignableTo(baseType, declared));
+                                    }
+                                }
+                            }
+                            
+                            return false;
+                        }
+                        
+                        // Resolve the thrown type to all its concrete constituents
+                        const resolvedThrownTypes = resolveToConcreteTypes(thrownType);
+                        
+                        // Check if all resolved thrown types are compatible with declared types
+                        return resolvedThrownTypes.every(resolvedThrown => 
+                            isAssignableToAnyDeclaredType(resolvedThrown, declaredTypeNodes)
+                        );
+                    }
+    function collectThrownTypes(body: Block | ConciseBody): Type[] {
+        const thrownTypes: Type[] = [];
+        const visitedFunctions = new Set<string>(); // Prevent infinite recursion
+    
+        function visit(node: Node) {
+            if (!node) return;
+            
+            // Skip throws clauses to avoid infinite recursion
+            if (node.kind === SyntaxKind.ThrowsClause) {
+                return;
+            }
+            
+            // Skip function declarations to avoid visiting their throws clauses
+            if (isFunctionLike(node) && node !== body) {
+                return;
+            }
+            
+            if (isThrowStatement(node)) {
+                if (node.expression) {
+                    thrownTypes.push(checkExpression(node.expression));
+                }
+            }
+            
+            // Collect throws from function calls
+            if (isCallExpression(node)) {
+                const signature = getResolvedSignature(node);
+                if (signature && signature.declaration) {
+                    const funcDecl = signature.declaration;
+                    const funcId = getNodeId(funcDecl).toString();
+                    
+                    // Check if function has explicit throws clause
+                    if (isFunctionLike(funcDecl) && funcDecl.throwsClause) {
+                        for (const throwType of funcDecl.throwsClause.types) {
+                            thrownTypes.push(getTypeFromTypeNode(throwType));
+                        }
+                    }
+                    // Infer throws from function body if no explicit clause and not already visited
+                    else if (isFunctionLikeDeclaration(funcDecl) && funcDecl.body && !visitedFunctions.has(funcId)) {
+                        visitedFunctions.add(funcId);
+                        const inferredThrows = collectThrownTypes(funcDecl.body);
+                        thrownTypes.push(...inferredThrows);
+                    }
+                }
+            }
+            
+            // Recursively visit all child nodes
+            forEachChild(node, visit);
+        }
+    
+        if (body.kind === SyntaxKind.Block) {
+            forEach((body as Block).statements, visit);
+        } else {
+            // Concise body: could be an expression or a throw
+            visit(body as Expression);
+        }
+    
+        return thrownTypes;
+    }
+
+    function isThrowStatement(statement: Node): statement is ThrowStatement {
+        return statement.kind === SyntaxKind.ThrowStatement;
+    }
+    
 
     function checkArithmeticOperandType(operand: Node, type: Type, diagnostic: DiagnosticMessage, isAwaitValid = false): boolean {
         if (!isTypeAssignableTo(type, numberOrBigIntType)) {
@@ -43941,11 +44292,95 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
         }
     }
 
-    function checkFunctionDeclaration(node: FunctionDeclaration): void {
-        addLazyDiagnostic(checkFunctionDeclarationDiagnostics);
+            function validateFunctionBodyAgainstThrowsClause(node: FunctionDeclaration | FunctionExpression | MethodDeclaration): void {
+            if (!node.body || !node.throwsClause || node.throwsClause.types.length === 0) {
+                return;
+            }
 
-        function checkFunctionDeclarationDiagnostics() {
+            // Collect actually thrown types from function body
+            const actuallyThrown = collectThrownTypesFromBody(node.body);
+            
+            // Get declared throws types
+            const declaredThrows = node.throwsClause.types;
+
+            // Check if each actually thrown type is compatible with declared throws
+            for (const thrownType of actuallyThrown) {
+                if (!isThrowsTypeCompatible(thrownType, declaredThrows)) {
+                    error(node, Diagnostics.Function_throws_0_but_it_is_not_declared_in_the_throws_clause, typeToString(thrownType));
+                }
+            }
+        }
+
+        function collectThrownTypesFromBody(body: Block): Type[] {
+            const thrownTypes: Type[] = [];
+            
+            function visitNode(node: Node): void {
+                switch (node.kind) {
+                    case SyntaxKind.ThrowStatement:
+                        const throwStatement = node as ThrowStatement;
+                        const thrownType = getTypeOfExpression(throwStatement.expression);
+                        thrownTypes.push(thrownType);
+                        break;
+                        
+                    case SyntaxKind.CallExpression:
+                        const callExpression = node as CallExpression;
+                        const signature = getResolvedSignature(callExpression);
+                        if (signature && signature.declaration) {
+                            const throwsType = getThrowsTypeOfSignature(signature);
+                            if (throwsType) {
+                                thrownTypes.push(throwsType);
+                            }
+                        }
+                        break;
+                        
+                    case SyntaxKind.TryStatement:
+                        const tryStatement = node as TryStatement;
+                        // Only visit try block if there's no catch clause
+                        if (!tryStatement.catchClause) {
+                            forEachChild(tryStatement.tryBlock, visitNode);
+                        }
+                        // Always visit finally block
+                        if (tryStatement.finallyBlock) {
+                            forEachChild(tryStatement.finallyBlock, visitNode);
+                        }
+                        return; // Don't continue with normal traversal
+                }
+                
+                forEachChild(node, visitNode);
+            }
+            
+            forEachChild(body, visitNode);
+            return thrownTypes;
+        }
+
+        function checkFunctionDeclaration(node: FunctionDeclaration): void {
+            addLazyDiagnostic(checkFunctionDeclarationDiagnostics);
+
+            // Add function body validation for throws clauses
+            if (node.body && node.throwsClause && node.throwsClause.types.length > 0) {
+                validateFunctionBodyAgainstThrowsClause(node);
+            }
+
+            function checkFunctionDeclarationDiagnostics() {
             checkFunctionOrMethodDeclaration(node);
+            
+            // Check function body against throws clause
+            if (node.body && node.throwsClause) {
+                const declaredThrows = node.throwsClause.types;
+                const actuallyThrown = collectThrownTypes(node.body);
+                
+                // If throws clause is empty, allow all throws (inference mode)
+                if (declaredThrows.length === 0) {
+                    return;
+                }
+                
+                // Check if each actually thrown type is compatible with declared throws
+                for (const thrown of actuallyThrown) {
+                    if (!isThrowsTypeCompatible(thrown, declaredThrows)) {
+                        error(node, Diagnostics.Function_throws_0_but_it_is_not_declared_in_the_throws_clause, typeToString(thrown));
+                    }
+                }
+            }
             checkGrammarForGenerator(node);
             checkCollisionsForDeclarationName(node, node.name);
         }

@@ -39,6 +39,7 @@ import {
     CaseOrDefaultClause,
     cast,
     CatchClause,
+    ThrowsClause,
     CharacterCodes,
     ClassDeclaration,
     ClassElement,
@@ -993,6 +994,8 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         updateHeritageClause,
         createCatchClause,
         updateCatchClause,
+        createThrowsClause,
+        updateThrowsClause,
         createPropertyAssignment,
         updatePropertyAssignment,
         createShorthandPropertyAssignment,
@@ -1817,6 +1820,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         typeParameters: readonly TypeParameterDeclaration[] | undefined,
         parameters: readonly ParameterDeclaration[],
         type: TypeNode | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         const node = createBaseDeclaration<MethodSignature>(SyntaxKind.MethodSignature);
         node.modifiers = asNodeArray(modifiers);
@@ -1825,6 +1829,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         node.typeParameters = asNodeArray(typeParameters);
         node.parameters = asNodeArray(parameters);
         node.type = type;
+        node.throwsClause = throwsClause;
         node.transformFlags = TransformFlags.ContainsTypeScript;
 
         node.jsDoc = undefined; // initialized by parser (JsDocContainer)
@@ -1843,6 +1848,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         typeParameters: NodeArray<TypeParameterDeclaration> | undefined,
         parameters: NodeArray<ParameterDeclaration>,
         type: TypeNode | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         return node.modifiers !== modifiers
                 || node.name !== name
@@ -1850,7 +1856,8 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
                 || node.typeParameters !== typeParameters
                 || node.parameters !== parameters
                 || node.type !== type
-            ? finishUpdateBaseSignatureDeclaration(createMethodSignature(modifiers, name, questionToken, typeParameters, parameters, type), node)
+                || node.throwsClause !== throwsClause
+            ? finishUpdateBaseSignatureDeclaration(createMethodSignature(modifiers, name, questionToken, typeParameters, parameters, type, throwsClause), node)
             : node;
     }
 
@@ -1864,6 +1871,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         parameters: readonly ParameterDeclaration[],
         type: TypeNode | undefined,
         body: Block | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         const node = createBaseDeclaration<MethodDeclaration>(SyntaxKind.MethodDeclaration);
         node.modifiers = asNodeArray(modifiers);
@@ -1875,7 +1883,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         node.parameters = createNodeArray(parameters);
         node.type = type;
         node.body = body;
-
+        node.throwsClause = throwsClause;
         if (!node.body) {
             node.transformFlags = TransformFlags.ContainsTypeScript;
         }
@@ -1921,6 +1929,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         parameters: readonly ParameterDeclaration[],
         type: TypeNode | undefined,
         body: Block | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         return node.modifiers !== modifiers
                 || node.asteriskToken !== asteriskToken
@@ -1930,7 +1939,8 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
                 || node.parameters !== parameters
                 || node.type !== type
                 || node.body !== body
-            ? finishUpdateMethodDeclaration(createMethodDeclaration(modifiers, asteriskToken, name, questionToken, typeParameters, parameters, type, body), node)
+                || node.throwsClause !== throwsClause
+            ? finishUpdateMethodDeclaration(createMethodDeclaration(modifiers, asteriskToken, name, questionToken, typeParameters, parameters, type, body, throwsClause), node)
             : node;
     }
 
@@ -2038,6 +2048,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         parameters: readonly ParameterDeclaration[],
         type: TypeNode | undefined,
         body: Block | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         const node = createBaseDeclaration<GetAccessorDeclaration>(SyntaxKind.GetAccessor);
         node.modifiers = asNodeArray(modifiers);
@@ -2045,7 +2056,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         node.parameters = createNodeArray(parameters);
         node.type = type;
         node.body = body;
-
+        node.throwsClause = throwsClause;
         if (!node.body) {
             node.transformFlags = TransformFlags.ContainsTypeScript;
         }
@@ -2077,13 +2088,15 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         parameters: readonly ParameterDeclaration[],
         type: TypeNode | undefined,
         body: Block | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         return node.modifiers !== modifiers
                 || node.name !== name
                 || node.parameters !== parameters
                 || node.type !== type
                 || node.body !== body
-            ? finishUpdateGetAccessorDeclaration(createGetAccessorDeclaration(modifiers, name, parameters, type, body), node)
+                || node.throwsClause !== throwsClause
+            ? finishUpdateGetAccessorDeclaration(createGetAccessorDeclaration(modifiers, name, parameters, type, body, throwsClause), node)
             : node;
     }
 
@@ -2101,13 +2114,14 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         name: string | PropertyName,
         parameters: readonly ParameterDeclaration[],
         body: Block | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         const node = createBaseDeclaration<SetAccessorDeclaration>(SyntaxKind.SetAccessor);
         node.modifiers = asNodeArray(modifiers);
         node.name = asName(name);
         node.parameters = createNodeArray(parameters);
         node.body = body;
-
+        node.throwsClause = throwsClause;
         if (!node.body) {
             node.transformFlags = TransformFlags.ContainsTypeScript;
         }
@@ -2138,12 +2152,14 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         name: PropertyName,
         parameters: readonly ParameterDeclaration[],
         body: Block | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         return node.modifiers !== modifiers
                 || node.name !== name
                 || node.parameters !== parameters
                 || node.body !== body
-            ? finishUpdateSetAccessorDeclaration(createSetAccessorDeclaration(modifiers, name, parameters, body), node)
+                || node.throwsClause !== throwsClause
+            ? finishUpdateSetAccessorDeclaration(createSetAccessorDeclaration(modifiers, name, parameters, body, throwsClause), node)
             : node;
     }
 
@@ -2161,13 +2177,14 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         typeParameters: readonly TypeParameterDeclaration[] | undefined,
         parameters: readonly ParameterDeclaration[],
         type: TypeNode | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ): CallSignatureDeclaration {
         const node = createBaseDeclaration<CallSignatureDeclaration>(SyntaxKind.CallSignature);
         node.typeParameters = asNodeArray(typeParameters);
         node.parameters = asNodeArray(parameters);
         node.type = type;
         node.transformFlags = TransformFlags.ContainsTypeScript;
-
+        node.throwsClause = throwsClause;
         node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         node.locals = undefined; // initialized by binder (LocalsContainer)
         node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -2181,11 +2198,13 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         typeParameters: NodeArray<TypeParameterDeclaration> | undefined,
         parameters: NodeArray<ParameterDeclaration>,
         type: TypeNode | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         return node.typeParameters !== typeParameters
                 || node.parameters !== parameters
                 || node.type !== type
-            ? finishUpdateBaseSignatureDeclaration(createCallSignature(typeParameters, parameters, type), node)
+                || node.throwsClause !== throwsClause
+            ? finishUpdateBaseSignatureDeclaration(createCallSignature(typeParameters, parameters, type, throwsClause), node)
             : node;
     }
 
@@ -2194,13 +2213,14 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         typeParameters: readonly TypeParameterDeclaration[] | undefined,
         parameters: readonly ParameterDeclaration[],
         type: TypeNode | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ): ConstructSignatureDeclaration {
         const node = createBaseDeclaration<ConstructSignatureDeclaration>(SyntaxKind.ConstructSignature);
         node.typeParameters = asNodeArray(typeParameters);
         node.parameters = asNodeArray(parameters);
         node.type = type;
         node.transformFlags = TransformFlags.ContainsTypeScript;
-
+        node.throwsClause = throwsClause;
         node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         node.locals = undefined; // initialized by binder (LocalsContainer)
         node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -2214,11 +2234,13 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         typeParameters: NodeArray<TypeParameterDeclaration> | undefined,
         parameters: NodeArray<ParameterDeclaration>,
         type: TypeNode | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         return node.typeParameters !== typeParameters
                 || node.parameters !== parameters
                 || node.type !== type
-            ? finishUpdateBaseSignatureDeclaration(createConstructSignature(typeParameters, parameters, type), node)
+                || node.throwsClause !== throwsClause
+            ? finishUpdateBaseSignatureDeclaration(createConstructSignature(typeParameters, parameters, type, throwsClause), node)
             : node;
     }
 
@@ -2322,13 +2344,14 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         typeParameters: readonly TypeParameterDeclaration[] | undefined,
         parameters: readonly ParameterDeclaration[],
         type: TypeNode,
+        throwsClause?: ThrowsClause | undefined,
     ): FunctionTypeNode {
         const node = createBaseDeclaration<FunctionTypeNode>(SyntaxKind.FunctionType);
         node.typeParameters = asNodeArray(typeParameters);
         node.parameters = asNodeArray(parameters);
         node.type = type;
         node.transformFlags = TransformFlags.ContainsTypeScript;
-
+        node.throwsClause = throwsClause;
         node.modifiers = undefined; // initialized by parser for grammar errors
         node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         node.locals = undefined; // initialized by binder (LocalsContainer)
@@ -2343,11 +2366,13 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         typeParameters: NodeArray<TypeParameterDeclaration> | undefined,
         parameters: NodeArray<ParameterDeclaration>,
         type: TypeNode,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         return node.typeParameters !== typeParameters
                 || node.parameters !== parameters
                 || node.type !== type
-            ? finishUpdateFunctionTypeNode(createFunctionTypeNode(typeParameters, parameters, type), node)
+                || node.throwsClause !== throwsClause
+            ? finishUpdateFunctionTypeNode(createFunctionTypeNode(typeParameters, parameters, type, throwsClause), node)
             : node;
     }
 
@@ -2361,7 +2386,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
 
     // @api
     function createConstructorTypeNode(...args: Parameters<typeof createConstructorTypeNode1 | typeof createConstructorTypeNode2>) {
-        return args.length === 4 ? createConstructorTypeNode1(...args) :
+        return args.length === 5? createConstructorTypeNode1(...args) :
             args.length === 3 ? createConstructorTypeNode2(...args) :
             Debug.fail("Incorrect number of arguments specified.");
     }
@@ -2371,6 +2396,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         typeParameters: readonly TypeParameterDeclaration[] | undefined,
         parameters: readonly ParameterDeclaration[],
         type: TypeNode,
+        throwsClause?: ThrowsClause,
     ): ConstructorTypeNode {
         const node = createBaseDeclaration<ConstructorTypeNode>(SyntaxKind.ConstructorType);
         node.modifiers = asNodeArray(modifiers);
@@ -2378,7 +2404,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         node.parameters = asNodeArray(parameters);
         node.type = type;
         node.transformFlags = TransformFlags.ContainsTypeScript;
-
+        node.throwsClause = throwsClause;
         node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         node.locals = undefined; // initialized by binder (LocalsContainer)
         node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -2391,13 +2417,14 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         typeParameters: readonly TypeParameterDeclaration[] | undefined,
         parameters: readonly ParameterDeclaration[],
         type: TypeNode,
+        throwsClause?: ThrowsClause,
     ): ConstructorTypeNode {
-        return createConstructorTypeNode1(/*modifiers*/ undefined, typeParameters, parameters, type);
+        return createConstructorTypeNode1(/*modifiers*/ undefined, typeParameters, parameters, type, throwsClause);
     }
 
     // @api
     function updateConstructorTypeNode(...args: Parameters<typeof updateConstructorTypeNode1 | typeof updateConstructorTypeNode2>) {
-        return args.length === 5 ? updateConstructorTypeNode1(...args) :
+        return args.length === 6 ? updateConstructorTypeNode1(...args) :
             args.length === 4 ? updateConstructorTypeNode2(...args) :
             Debug.fail("Incorrect number of arguments specified.");
     }
@@ -2408,12 +2435,14 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         typeParameters: NodeArray<TypeParameterDeclaration> | undefined,
         parameters: NodeArray<ParameterDeclaration>,
         type: TypeNode,
+        throwsClause?: ThrowsClause,
     ) {
         return node.modifiers !== modifiers
                 || node.typeParameters !== typeParameters
                 || node.parameters !== parameters
                 || node.type !== type
-            ? finishUpdateBaseSignatureDeclaration(createConstructorTypeNode(modifiers, typeParameters, parameters, type), node)
+                || node.throwsClause !== throwsClause
+            ? finishUpdateBaseSignatureDeclaration(createConstructorTypeNode(modifiers, typeParameters, parameters, type, throwsClause), node)
             : node;
     }
 
@@ -2423,8 +2452,9 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         typeParameters: NodeArray<TypeParameterDeclaration> | undefined,
         parameters: NodeArray<ParameterDeclaration>,
         type: TypeNode,
+        throwsClause?: ThrowsClause,
     ) {
-        return updateConstructorTypeNode1(node, node.modifiers, typeParameters, parameters, type);
+        return updateConstructorTypeNode1(node, node.modifiers, typeParameters, parameters, type, throwsClause);
     }
 
     // @api
@@ -3182,6 +3212,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         parameters: readonly ParameterDeclaration[] | undefined,
         type: TypeNode | undefined,
         body: Block,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         const node = createBaseDeclaration<FunctionExpression>(SyntaxKind.FunctionExpression);
         node.modifiers = asNodeArray(modifiers);
@@ -3191,7 +3222,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         node.parameters = createNodeArray(parameters);
         node.type = type;
         node.body = body;
-
+        node.throwsClause = throwsClause;
         const isAsync = modifiersToFlags(node.modifiers) & ModifierFlags.Async;
         const isGenerator = !!node.asteriskToken;
         const isAsyncGenerator = isAsync && isGenerator;
@@ -3228,8 +3259,9 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         name: Identifier | undefined,
         typeParameters: readonly TypeParameterDeclaration[] | undefined,
         parameters: readonly ParameterDeclaration[],
-        type: TypeNode | undefined,
+        type: TypeNode | undefined, 
         body: Block,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         return node.name !== name
                 || node.modifiers !== modifiers
@@ -3238,7 +3270,8 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
                 || node.parameters !== parameters
                 || node.type !== type
                 || node.body !== body
-            ? finishUpdateBaseSignatureDeclaration(createFunctionExpression(modifiers, asteriskToken, name, typeParameters, parameters, type, body), node)
+                || node.throwsClause !== throwsClause
+            ? finishUpdateBaseSignatureDeclaration(createFunctionExpression(modifiers, asteriskToken, name, typeParameters, parameters, type, body, throwsClause), node)
             : node;
     }
 
@@ -3250,6 +3283,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         type: TypeNode | undefined,
         equalsGreaterThanToken: EqualsGreaterThanToken | undefined,
         body: ConciseBody,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         const node = createBaseDeclaration<ArrowFunction>(SyntaxKind.ArrowFunction);
         node.modifiers = asNodeArray(modifiers);
@@ -3258,7 +3292,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         node.type = type;
         node.equalsGreaterThanToken = equalsGreaterThanToken ?? createToken(SyntaxKind.EqualsGreaterThanToken);
         node.body = parenthesizerRules().parenthesizeConciseBodyOfArrowFunction(body);
-
+        node.throwsClause = throwsClause;
         const isAsync = modifiersToFlags(node.modifiers) & ModifierFlags.Async;
 
         node.transformFlags = propagateChildrenFlags(node.modifiers) |
@@ -3290,6 +3324,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         type: TypeNode | undefined,
         equalsGreaterThanToken: EqualsGreaterThanToken,
         body: ConciseBody,
+        throwsClause?: ThrowsClause | undefined,
     ): ArrowFunction {
         return node.modifiers !== modifiers
                 || node.typeParameters !== typeParameters
@@ -3297,7 +3332,8 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
                 || node.type !== type
                 || node.equalsGreaterThanToken !== equalsGreaterThanToken
                 || node.body !== body
-            ? finishUpdateBaseSignatureDeclaration(createArrowFunction(modifiers, typeParameters, parameters, type, equalsGreaterThanToken, body), node)
+                || node.throwsClause !== throwsClause
+            ? finishUpdateBaseSignatureDeclaration(createArrowFunction(modifiers, typeParameters, parameters, type, equalsGreaterThanToken, body, throwsClause), node)
             : node;
     }
 
@@ -4305,6 +4341,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         parameters: readonly ParameterDeclaration[],
         type: TypeNode | undefined,
         body: Block | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         const node = createBaseDeclaration<FunctionDeclaration>(SyntaxKind.FunctionDeclaration);
         node.modifiers = asNodeArray(modifiers);
@@ -4314,7 +4351,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         node.parameters = createNodeArray(parameters);
         node.type = type;
         node.body = body;
-
+        node.throwsClause = throwsClause;
         if (!node.body || modifiersToFlags(node.modifiers) & ModifierFlags.Ambient) {
             node.transformFlags = TransformFlags.ContainsTypeScript;
         }
@@ -4357,6 +4394,7 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         parameters: readonly ParameterDeclaration[],
         type: TypeNode | undefined,
         body: Block | undefined,
+        throwsClause?: ThrowsClause | undefined,
     ) {
         return node.modifiers !== modifiers
                 || node.asteriskToken !== asteriskToken
@@ -4365,7 +4403,8 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
                 || node.parameters !== parameters
                 || node.type !== type
                 || node.body !== body
-            ? finishUpdateFunctionDeclaration(createFunctionDeclaration(modifiers, asteriskToken, name, typeParameters, parameters, type, body), node)
+                || node.throwsClause !== throwsClause
+            ? finishUpdateFunctionDeclaration(createFunctionDeclaration(modifiers, asteriskToken, name, typeParameters, parameters, type, body, throwsClause), node)
             : node;
     }
 
@@ -5111,16 +5150,16 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         return node.type !== type
             ? update(createJSDocUnaryTypeWorker(kind, type), node)
             : node;
-    }
+    }   
 
     // @api
-    function createJSDocFunctionType(parameters: readonly ParameterDeclaration[], type: TypeNode | undefined): JSDocFunctionType {
+    function createJSDocFunctionType(parameters: readonly ParameterDeclaration[], type: TypeNode | undefined, throwsClause?: ThrowsClause | undefined): JSDocFunctionType {
         const node = createBaseDeclaration<JSDocFunctionType>(SyntaxKind.JSDocFunctionType);
         node.parameters = asNodeArray(parameters);
         node.type = type;
         node.transformFlags = propagateChildrenFlags(node.parameters) |
             (node.type ? TransformFlags.ContainsTypeScript : TransformFlags.None);
-
+        node.throwsClause = throwsClause;
         node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         node.locals = undefined; // initialized by binder (LocalsContainer)
         node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -5129,10 +5168,11 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
     }
 
     // @api
-    function updateJSDocFunctionType(node: JSDocFunctionType, parameters: readonly ParameterDeclaration[], type: TypeNode | undefined): JSDocFunctionType {
+    function updateJSDocFunctionType(node: JSDocFunctionType, parameters: readonly ParameterDeclaration[], type: TypeNode | undefined, throwsClause?: ThrowsClause | undefined): JSDocFunctionType {
         return node.parameters !== parameters
                 || node.type !== type
-            ? update(createJSDocFunctionType(parameters, type), node)
+                || node.throwsClause !== throwsClause
+            ? update(createJSDocFunctionType(parameters, type, throwsClause), node)
             : node;
     }
 
@@ -5905,6 +5945,21 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         node.locals = undefined; // initialized by binder (LocalsContainer)
         node.nextContainer = undefined; // initialized by binder (LocalsContainer)
         return node;
+    }
+
+    // @api
+    function createThrowsClause(types: NodeArray<TypeNode>): ThrowsClause {
+        const node = createBaseNode<ThrowsClause>(SyntaxKind.ThrowsClause);
+        node.throwsKeyword = SyntaxKind.ThrowsKeyword;
+        node.types = asNodeArray(types);
+        return node;
+    }
+
+    // @api
+    function updateThrowsClause(node: ThrowsClause, types: NodeArray<TypeNode>) {
+        return node.types !== types
+            ? update(createThrowsClause(types), node)
+            : node;
     }
 
     // @api

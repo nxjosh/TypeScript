@@ -64,6 +64,7 @@ import {
     isModuleReference,
     isNamedExportBindings,
     isNamedImportBindings,
+    isNodeArray,
     isObjectLiteralElementLike,
     isOptionalChain,
     isParameter,
@@ -626,6 +627,13 @@ const visitEachChildTable: VisitEachChildTable = {
             node,
             Debug.checkDefined(nodeVisitor(node.left, visitor, isEntityName)),
             Debug.checkDefined(nodeVisitor(node.right, visitor, isIdentifier)),
+        );
+    },
+
+    [SyntaxKind.ThrowsClause]: function visitEachChildOfThrowsClause(node, visitor, context, _nodesVisitor, nodeVisitor, _tokenVisitor) {
+        return context.factory.updateThrowsClause(
+            node,
+           _nodesVisitor(node.types, visitor, isTypeNode),
         );
     },
 
