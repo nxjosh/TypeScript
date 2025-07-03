@@ -4,6 +4,8 @@
 
 This is a fork of Microsoft's TypeScript that adds support for **throws clauses** in function signatures, enabling explicit exception type declarations and compile-time validation of error handling.
 
+You can read not-to-serious article about this here: [Fork Typescript: You Can Just Do Things](https://medium.com/@jbyj/fork-typescript-you-can-just-do-things-4948eb39b270)
+
 ### ✨ Features
 
 - **Explicit exception declarations** in function signatures
@@ -28,6 +30,29 @@ function parseNumber(input: string): number throws TypeError, RangeError {
     }
     
     return num;
+}
+
+// Or let TypeScript infer the throws clause from the function body
+function parseNumber(input: string) /* throws TypeError, RangeError */ {
+    if (typeof input !== 'string') {
+        throw new TypeError('Input must be a string'); // Inferred: TypeError
+    }
+    
+    const num = parseInt(input);
+    if (isNaN(num)) {
+        throw new RangeError('Invalid number format'); // Inferred: RangeError
+    }
+    
+    return num;
+}
+
+// and when you call it, TypeScript will check if the function throws the correct error types
+function test() { // ❌ Error: Function does not declare throws
+    parseNumber('123');
+}
+
+function test2() throws { // ✅ Valid - no error, pass through any exceptions
+    parseNumber('123');
 }
 ```
 
