@@ -118,6 +118,44 @@ function safeFunction(): string {
 }
 ```
 
+#### Throws Clause Inference from Function Body
+```typescript
+// TypeScript can infer throws clause from explicit throws in function body
+function inferredThrower(value: unknown) /* throws TypeError | RangeError */ {
+    if (typeof value !== 'number') {
+        throw new TypeError('Value must be a number'); // Inferred: TypeError
+    }
+    
+    if (value < 0) {
+        throw new RangeError('Value must be non-negative'); // Inferred: RangeError
+    }
+    
+    return value.toString();
+}
+// TypeScript infers: function inferredThrower(value: unknown): string throws TypeError | RangeError
+
+// Mixed explicit and inferred throws
+function mixedThrower(data: string): number throws SyntaxError {
+    if (!data) {
+        throw new TypeError('Data is required'); // ❌ Error: TypeError not in explicit throws clause
+    }
+    
+    if (data === 'invalid') {
+        throw new SyntaxError('Invalid data format'); // ✅ Valid - SyntaxError is declared
+    }
+    
+    return parseInt(data);
+}
+
+// Conditional throws inference
+function conditionalInference(condition: boolean) {
+    if (condition) {
+        throw new Error('Condition failed'); // Inferred: Error
+    }
+    // TypeScript infers: throws Error (only when condition is true)
+    return 'success';
+}
+
 #### Arrow Functions with Throws Clauses
 ```typescript
 // Arrow functions support throws clauses too
