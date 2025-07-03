@@ -4116,7 +4116,6 @@ namespace Parser {
             returnType = allowConditionalTypesAnd(parseTypeOrTypePredicate);
             
         }
-        // console.log('next token?',token(),SyntaxKind[token()])
         // Parse throws clause if present
         if (token() === SyntaxKind.ThrowsKeyword) {
             nextToken();
