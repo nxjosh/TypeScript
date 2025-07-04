@@ -46,12 +46,12 @@ function parseNumber(input: string) /* throws TypeError, RangeError */ {
     return num;
 }
 
-// and when you call it, TypeScript automatically infers the throws from the called function
-function test() /* throws TypeError, RangeError */ { // ✅ Valid - automatically inferred from parseNumber
+// and when you call it, TypeScript will check if the function throws the correct error types
+function test() { // ❌ Error: Function does not declare throws
     parseNumber('123');
 }
 
-function test2() throws { // ✅ Valid - explicit empty throws clause allows any exceptions
+function test2() throws { // ✅ Valid - no error, pass through any exceptions
     parseNumber('123');
 }
 ```
@@ -204,6 +204,29 @@ const conditionalThrower = <T>(value: T): string throws T extends Error ? never 
     return value;
 };
 ```
+
+#### 🚨 Important: Explicit Throws Declaration Required
+
+Functions **must explicitly declare throws clauses** to call other functions that throw exceptions:
+
+```typescript
+// ❌ Functions without throws clauses cannot call throwing functions
+function caller() {
+    parseNumber('123'); // Error: Function throws but not declared in throws clause
+}
+
+// ✅ Explicit empty throws clause allows any exceptions
+function callerWithEmptyThrows() throws {
+    parseNumber('123'); // Valid - can rethrow any exceptions
+}
+
+// ✅ Explicit specific throws clause must be compatible
+function callerWithSpecificThrows() throws TypeError, RangeError {
+    parseNumber('123'); // Valid - throws clause covers TypeError and RangeError
+}
+```
+
+**Note**: Throws inference determines a function's signature, but validation requires explicit throws declarations for calling throwing functions.
 
 ### 🔗 Original TypeScript
 
