@@ -39687,19 +39687,25 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                     checkReturnExpression(node, returnOrPromisedType, node.body, node.body, exprType);
                 }
             }
-            const declaredThrows = node.throwsClause?.types ?? [];
-            const actuallyThrown = collectThrownTypes(node.body);
-            
-         
-
-            for (const thrown of actuallyThrown) {
-                if (!isThrowsTypeCompatible(thrown, declaredThrows)) {
-                    error(node, {
-                        message: `Function throws ${typeToString(thrown)}, but it is not declared in the throws clause.`,
-                        category: DiagnosticCategory.Error,
-                        code: 1234,
-                        key: 'functionThrowsButNotDeclaredInThrowsClause',
-                    });
+            // Only validate throws for functions with explicit throws clauses
+            // Arrow functions without explicit throws clauses should be allowed to infer throws
+            if (node.throwsClause) {
+                const declaredThrows = node.throwsClause.types;
+                const actuallyThrown = collectThrownTypes(node.body);
+                
+                // If throws clause is empty, allow all throws (inference mode)
+                if (declaredThrows.length > 0) {
+                    // Check if each actually thrown type is compatible with declared throws
+                    for (const thrown of actuallyThrown) {
+                        if (!isThrowsTypeCompatible(thrown, declaredThrows)) {
+                            error(node, {
+                                message: `Function throws ${typeToString(thrown)}, but it is not declared in the throws clause.`,
+                                category: DiagnosticCategory.Error,
+                                code: 1234,
+                                key: 'functionThrowsButNotDeclaredInThrowsClause',
+                            });
+                        }
+                    }
                 }
             }
         }
